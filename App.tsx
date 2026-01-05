@@ -75,8 +75,7 @@ const App: React.FC = () => {
         speaker_id: MY_USER_ID, 
         source_lang: selectedLanguageRef.current.code, 
         source_text: segment,
-        last_segment_id: segmentId,
-        updated_at: new Date().toISOString()
+        last_segment_id: segmentId
       }, { onConflict: 'meeting_id' });
       
       if (error) throw error;

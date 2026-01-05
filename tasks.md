@@ -160,15 +160,16 @@ WORK CHECKLIST
 
 END LOG
 
-Timestamp: 2026-01-05 12:55
+Timestamp: 2026-01-05 13:06
 Summary of what actually changed:
-- Created `ErrorBanner` component.
+- Created `ErrorBanner` component with accessibility `title` attribute.
 - Implemented `reportError` centralized handler in `App.tsx`.
 - Added UI feedback for:
   - Audio Context failures
   - Speech Recognition errors
   - Supabase connection/insert errors
   - Translation streaming errors
+- Pushed changes to GitHub.
 
 Files actually modified:
 - components/ErrorBanner.tsx
@@ -176,10 +177,30 @@ Files actually modified:
 - tasks.md
 
 How it was tested:
-- (Implicit) Compile check via next steps.
+- Browser verification of UI.
+- git push successful.
 
 Test result:
 - PASS
 
 Known limitations or follow-up tasks:
 - None.
+
+------------------------------------------------------------
+
+Task ID: T-0004
+Title: Fix Schema Mismatch (updated_at)
+Status: DONE
+Owner: Miles
+Created: 2026-01-05 13:10
+Last updated: 2026-01-05 13:10
+
+Start log:
+- Timestamp: 2026-01-05 13:10
+- Plan: Remove non-existent `updated_at` column from `transcript_segments` upsert in `App.tsx` based on user-provided schema.
+
+End log:
+- Timestamp: 2026-01-05 13:11
+- Changed: Removed `updated_at` from `shipSegment` in `App.tsx`.
+- Tests: Code adjustment to match schema.
+- Status: DONE
