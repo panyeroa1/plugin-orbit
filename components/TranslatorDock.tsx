@@ -142,12 +142,12 @@ const TranslatorDock: React.FC<TranslatorDockProps> = ({
         <div className="relative flex-1 flex items-stretch border-r border-white/5">
           <button
             onClick={onSpeakToggle}
-            disabled={(isSomeoneElseSpeaking && !isMeSpeaking) || isMeListening}
+            disabled={isSomeoneElseSpeaking && !isMeSpeaking}
             className={`flex-1 flex items-center justify-center gap-3 px-4 transition-all disabled:opacity-30 ${
               isMeSpeaking ? 'bg-red-500/90 text-white animate-live-pulse' : 'hover:bg-white/5 text-slate-300'
             }`}
           >
-            {isMeSpeaking ? <X className="w-4 h-4" /> : (isSomeoneElseSpeaking || isMeListening ? <Lock className="w-4 h-4 opacity-40" /> : <Mic className="w-4 h-4" />)}
+            {isMeSpeaking ? <X className="w-4 h-4" /> : ((isSomeoneElseSpeaking && !isMeSpeaking) ? <Lock className="w-4 h-4 opacity-40" /> : <Mic className="w-4 h-4" />)}
             <span className="font-bold text-[16px] tracking-tight">Speak</span>
             {isMeSpeaking && audioData && <AudioVisualizer data={audioData} colorClass="bg-white" />}
           </button>
