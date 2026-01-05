@@ -28,12 +28,19 @@ const App: React.FC = () => {
   useEffect(() => {
     const initSession = async () => {
       try {
-        // Anonymous Auth
-        const { data: { user }, error: authError } = await supabase.auth.signInAnonymously();
-        if (authError) {
-          reportError("Authentication failed", authError);
+        // Check for existing session first to avoid rate limits
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          setSessionUser(session.user);
         } else {
-          setSessionUser(user);
+          // Only sign in if no existing session
+          const { data: { user }, error: authError } = await supabase.auth.signInAnonymously();
+          if (authError) {
+            reportError("Authentication failed", authError);
+          } else {
+            setSessionUser(user);
+          }
         }
 
         // Dynamic Meeting ID: Check session storage or URL, else generate new
