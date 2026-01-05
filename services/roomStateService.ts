@@ -1,96 +1,74 @@
+import { supabase } from './supabaseClient';
+import { RoomState } from '../types';
 
-import { RoomState, SpeakerInfo, QueueEntry } from '../types';
+export async function getRoomState(meetingId: string): Promise<RoomState> {
+  const { data } = await supabase.from('meetings').select('*').eq('meeting_id', meetingId).single();
+  
+  if (!data) return { activeSpeaker: null, raiseHandQueue: [], lockVersion: 0 };
 
-const STORAGE_KEY = 'translator_plugin_room_state';
-
-const INITIAL_STATE: RoomState = {
-  activeSpeaker: null,
-  raiseHandQueue: [],
-  lockVersion: 0,
-};
-
-export function getRoomState(): RoomState {
-  const data = localStorage.getItem(STORAGE_KEY);
-  return data ? JSON.parse(data) : INITIAL_STATE;
+  return {
+    activeSpeaker: data.active_speaker_id ? {
+      userId: data.active_speaker_id,
+      userName: 'Speaker', // TODO: fetch name or store it
+      sessionId: 'session',
+      since: Date.now()
+    } : null,
+    raiseHandQueue: [],
+    lockVersion: 0
+  };
 }
 
-export function updateRoomState(newState: RoomState) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
-  // Dispatch event for other tabs
-  window.dispatchEvent(new Event('storage'));
+export function subscribeToRoom(meetingId: string, callback: (state: RoomState) => void) {
+  const channel = supabase.channel(`room:${meetingId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings', filter: `meeting_id=eq.${meetingId}` }, 
+      async (payload: any) => {
+        const newRow = payload.new;
+        if (newRow) {
+           // If we have a speaker ID, we ideally want their name. for now callback with generic
+           callback({
+             activeSpeaker: newRow.active_speaker_id ? {
+               userId: newRow.active_speaker_id,
+               userName: 'Speaker', 
+               sessionId: 'live', 
+               since: Date.now()
+             } : null,
+             raiseHandQueue: [],
+             lockVersion: Date.now()
+           });
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
 
-export function subscribeToRoomState(callback: (state: RoomState) => void) {
-  const handler = () => callback(getRoomState());
-  window.addEventListener('storage', handler);
-  callback(getRoomState());
-  return () => window.removeEventListener('storage', handler);
+export async function tryAcquireSpeaker(meetingId: string, userId: string): Promise<boolean> {
+  // Optimistic locking: Update only if active_speaker_id is NULL
+  const { error, data } = await supabase
+    .from('meetings')
+    .update({ active_speaker_id: userId })
+    .eq('meeting_id', meetingId)
+    .is('active_speaker_id', null)
+    .select();
+
+  return !error && data && data.length > 0;
 }
 
-export function tryAcquireSpeaker(userId: string, userName: string): boolean {
-  const state = getRoomState();
-  if (state.activeSpeaker === null) {
-    const newState: RoomState = {
-      ...state,
-      activeSpeaker: {
-        userId,
-        userName,
-        sessionId: Math.random().toString(36).substring(7),
-        since: Date.now(),
-      },
-      lockVersion: state.lockVersion + 1,
-    };
-    updateRoomState(newState);
-    return true;
-  }
-  return false;
-}
-
-export function releaseSpeaker(userId: string) {
-  const state = getRoomState();
-  if (state.activeSpeaker?.userId === userId) {
-    let nextQueue = [...state.raiseHandQueue];
-    let nextSpeaker: SpeakerInfo | null = null;
-    
-    if (nextQueue.length > 0) {
-      const nextInLine = nextQueue.shift()!;
-      nextSpeaker = {
-        userId: nextInLine.userId,
-        userName: nextInLine.userName,
-        sessionId: Math.random().toString(36).substring(7),
-        since: Date.now(),
-      };
-    }
-
-    const newState: RoomState = {
-      ...state,
-      activeSpeaker: nextSpeaker,
-      raiseHandQueue: nextQueue,
-      lockVersion: state.lockVersion + 1,
-    };
-    updateRoomState(newState);
-  }
+export async function releaseSpeaker(meetingId: string, userId: string) {
+  await supabase
+    .from('meetings')
+    .update({ active_speaker_id: null })
+    .eq('meeting_id', meetingId)
+    .eq('active_speaker_id', userId);
 }
 
 export function raiseHand(userId: string, userName: string) {
-  const state = getRoomState();
-  if (state.raiseHandQueue.some(q => q.userId === userId)) return;
-  if (state.activeSpeaker?.userId === userId) return;
-
-  const newState: RoomState = {
-    ...state,
-    raiseHandQueue: [...state.raiseHandQueue, { userId, userName, requestedAt: Date.now() }],
-    lockVersion: state.lockVersion + 1,
-  };
-  updateRoomState(newState);
+  // Not implemented in DB yet
 }
 
 export function lowerHand(userId: string) {
-  const state = getRoomState();
-  const newState: RoomState = {
-    ...state,
-    raiseHandQueue: state.raiseHandQueue.filter(q => q.userId !== userId),
-    lockVersion: state.lockVersion + 1,
-  };
-  updateRoomState(newState);
+  // Not implemented in DB yet
 }

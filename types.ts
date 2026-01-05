@@ -1,5 +1,12 @@
+export type AppMode = 'idle' | 'listening' | 'speaking';
+export type Role = 'host' | 'attendee';
 
-export type AppMode = "idle" | "speaking" | "listening";
+export interface Participant {
+  user_id: string;
+  role: Role;
+  name: string;
+}
+
 export type ListenPreference = "raw" | "translated";
 export type AudioSource = "mic" | "system";
 

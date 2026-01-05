@@ -51,7 +51,7 @@ export async function streamTranslation(
   audioCtx: AudioContext,
   onAudioData: (data: Uint8Array) => void,
   onTranscript: (text: string) => void,
-  onEnd: () => void,
+  onEnd: (finalText: string) => void,
   sourceLangCode: string = 'auto',
   retryCount: number = 0
 ) {
@@ -114,10 +114,10 @@ export async function streamTranslation(
 
           if (message.serverContent?.turnComplete) {
             const waitTime = Math.max(0, (nextStartTime - audioCtx.currentTime) * 1000);
-            setTimeout(onEnd, waitTime + 100);
+            setTimeout(() => onEnd(fullTranslation), waitTime + 100);
           }
         },
-        onclose: () => onEnd(),
+        onclose: () => onEnd(fullTranslation),
         onerror: async (e: any) => {
           console.warn(`Gemini Live Error (Attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`, e);
           
@@ -130,14 +130,14 @@ export async function streamTranslation(
               streamTranslation(sourceText, targetLangName, audioCtx, onAudioData, onTranscript, onEnd, sourceLangCode, retryCount + 1);
             }, delay);
           } else {
-            onEnd();
+            onEnd(fullTranslation);
           }
         }
       }
     });
   } catch (err) {
     console.error("Connection initiation failed:", err);
-    onEnd();
+    onEnd("");
   }
 }
 

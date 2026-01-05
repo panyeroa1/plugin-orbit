@@ -8,9 +8,7 @@ import ErrorBanner from './components/ErrorBanner';
 import * as roomStateService from './services/roomStateService';
 import * as geminiService from './services/geminiService';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+import { supabase } from './services/supabaseClient';
 
 const MY_USER_ID = `user_${Math.random().toString(36).substring(7)}`;
 const MY_USER_NAME = `Member ${MY_USER_ID.split('_')[1].toUpperCase()}`;
@@ -54,7 +52,7 @@ const App: React.FC = () => {
 
 
   const [audioSource, setAudioSource] = useState<AudioSource>('mic');
-  const [roomState, setRoomState] = useState<RoomState>(roomStateService.getRoomState());
+  const [roomState, setRoomState] = useState<RoomState>({ activeSpeaker: null, raiseHandQueue: [], lockVersion: 0 });
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(LANGUAGES[0]);
   
   const [lastFinalText, setLastFinalText] = useState<string>('');
@@ -142,11 +140,30 @@ const App: React.FC = () => {
     }
   };
 
+  const updateTranslation = async (segmentId: string, translation: string, targetLang: string) => {
+    try {
+      if (!meetingId || !segmentId || !translation) return;
+
+      const { error } = await supabase.from('transcript_segments')
+        .update({ 
+          translated_text: translation,
+          target_lang: targetLang
+        })
+        .eq('meeting_id', meetingId)
+        .eq('last_segment_id', segmentId);
+
+      if (error) console.error("Failed to save translation:", error);
+    } catch (err) {
+      console.error("Error updating translation:", err);
+    }
+  };
+
   const processNextInQueue = useCallback(async () => {
     if (segmentQueueRef.current.length === 0 || isTtsActiveRef.current) return;
 
     const row = segmentQueueRef.current.shift();
-    if (!row || row.last_segment_id === lastProcessedSegmentIdRef.current) {
+    if (!row) return; // || row.speaker_id === MY_USER_ID) return;
+    if (row.last_segment_id === lastProcessedSegmentIdRef.current) {
       processNextInQueue();
       return;
     }
@@ -175,7 +192,10 @@ const App: React.FC = () => {
           setIsTtsLoading(false);
         },
         (text) => setTranslatedStreamText(text),
-        () => {
+        (finalText) => {
+          if (finalText && row.last_segment_id) {
+            updateTranslation(row.last_segment_id, finalText, currentTargetLang.code);
+          }
           isTtsActiveRef.current = false;
           setAudioData(new Uint8Array(0));
           if (segmentQueueRef.current.length > 0) processNextInQueue();
@@ -192,7 +212,7 @@ const App: React.FC = () => {
   }, [ensureAudioContext, reportError]);
 
   const handleIncomingRow = useCallback((row: any) => {
-    if (!row || row.speaker_id === MY_USER_ID) return;
+    if (!row) return; // || row.speaker_id === MY_USER_ID) return;
     if (row.last_segment_id === lastProcessedSegmentIdRef.current) return;
     if (segmentQueueRef.current.some(q => q.last_segment_id === row.last_segment_id)) return;
 
@@ -257,7 +277,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSpeakToggle = () => {
+  const handleSpeakToggle = async () => {
     ensureAudioContext();
     if (mode === 'speaking') {
       if (recognitionRef.current) recognitionRef.current.stop();
@@ -267,9 +287,10 @@ const App: React.FC = () => {
       setLastFinalText('');
       sentenceBufferRef.current = '';
       shippedCharsRef.current = 0;
-      roomStateService.releaseSpeaker(MY_USER_ID);
+      if (meetingId) await roomStateService.releaseSpeaker(meetingId, MY_USER_ID);
     } else {
-      const acquired = roomStateService.tryAcquireSpeaker(MY_USER_ID, MY_USER_NAME);
+      if (!meetingId) return; 
+      const acquired = await roomStateService.tryAcquireSpeaker(meetingId, MY_USER_ID);
       if (acquired) {
         try {
            const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -344,11 +365,40 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    const unsub = roomStateService.subscribeToRoomState(setRoomState);
-    return () => unsub();
-  }, []);
+    if (meetingId) {
+       const unsub = roomStateService.subscribeToRoom(meetingId, setRoomState);
+       return () => unsub();
+    }
+  }, [meetingId]);
 
   const sourceDisplayText = livePartialText || lastFinalText;
+
+  // Join meeting DB logic
+  const joinMeetingDB = async (mId: string, uId: string) => {
+    try {
+      // 1. Check if meeting exists
+      const { data: meeting } = await supabase.from('meetings').select('host_id').eq('meeting_id', mId).maybeSingle();
+      
+      let role = 'attendee';
+      if (!meeting) {
+        // Create meeting, I am host
+        const { error: createErr } = await supabase.from('meetings').insert({ meeting_id: mId, host_id: uId });
+        if (!createErr) role = 'host';
+      } else if (meeting.host_id === uId) {
+        role = 'host';
+      }
+
+      // 2. Add/Update participant
+      await supabase.from('participants').upsert({
+        meeting_id: mId,
+        user_id: uId,
+        role: role
+      }, { onConflict: 'meeting_id,user_id' });
+      
+    } catch (err) {
+      console.error("Error joining meeting DB:", err);
+    }
+  };
 
   return (
     <div className={`min-h-screen bg-black flex flex-col items-center overflow-hidden relative transition-all duration-300 ${isDockMinimized ? 'pt-0' : 'pt-[60px]'}`}>
@@ -384,11 +434,11 @@ const App: React.FC = () => {
               const newId = initialMeetingId || `MEETING_${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
               sessionStorage.setItem('eburon_meeting_id', newId);
               setMeetingId(newId);
-              // If we joined a specific room via input, we might want to reload to be safe, 
-              // but state update is usually enough for a fresh session. 
-              // However, if the user typed an ID, let's make sure we sync everything.
+              
+              // Allow async join to happen in background
+              joinMeetingDB(newId, MY_USER_ID);
+
               if (initialMeetingId) {
-                // optional: force reload if needing clean state for specific room
                 window.location.href = `${window.location.origin}?meeting=${newId}`;
               }
             }
