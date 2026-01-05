@@ -86,6 +86,7 @@ const TranslatorPanel: React.FC<TranslatorPanelProps> = ({
         </div>
         <button
           onClick={onContinuousToggle}
+          title={isContinuous ? 'Disable continuous listening' : 'Enable continuous listening'}
           className={`w-12 h-6 rounded-full transition-colors relative ${
             isContinuous ? 'bg-blue-600' : 'bg-slate-600'
           }`}
