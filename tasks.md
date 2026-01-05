@@ -187,48 +187,61 @@ Known limitations or follow-up tasks:
 
 ------------------------------------------------------------
 
-Task ID: T-0005
-Title: Implement VAD & Sentence Segmentation
-Status: IN-PROGRESS
+Task ID: T-0006
+Title: Refactor Buttons to Sticky Header (60px)
+Status: DONE
 Owner: Miles
-Created: 2026-01-05 13:12
-Last updated: 2026-01-05 13:12
+Created: 2026-01-05 13:25
+Last updated: 2026-01-05 13:35
 
 START LOG
 
-Timestamp: 2026-01-05 13:12
+Timestamp: 2026-01-05 13:25
 Current behavior or state:
-- Ships whole "isFinal" blocks from webkitSpeechRecognition.
-- No interim segmentation or silence detection for faster saving.
+- Buttons are in a floating dock (TranslatorDock) with ~74px height.
+- Transcription area is above the dock.
+- Layout is centered with pt-48.
 
 Plan and scope for this task:
-- Implement sentence-level splitting using `Intl.Segmenter`.
-- Track a persistent buffer of spoken text.
-- Add a silence timeout (1.5s) to flush pending text as a completed sentence.
-- Update `shipSegment` to append to `full_transcription` while updating `source_text`.
+- Move buttons to a sticky header at the top of the screen.
+- Set header height to exactly 60px.
+- Adjust button styles (padding, fonts, icons) to fit 60px.
+- Move transcription text to the bottom of the screen (maintaining previous preference).
+- Ensure header is sticky and has proper z-index.
 
 Files or modules expected to change:
 - App.tsx
+- components/TranslatorDock.tsx
 
 Risks or things to watch out for:
-- Duplicate segments if not tracking shipped status correctly.
-- `Intl.Segmenter` compatibility (add fallback).
+- Overlapping content with the sticky header.
+- Responsiveness on smaller screens with reduced height.
+
+WORK CHECKLIST
+
+- [x] Refactor TranslatorDock to be a 60px header
+- [x] Update App.tsx layout (sticky header + bottom transcription)
+- [x] Verify button functionality in new layout
+- [x] Final visual polish
 
 END LOG
 
-Timestamp: 2026-01-05 13:14
+Timestamp: 2026-01-05 13:35
 Summary of what actually changed:
-- Implemented `splitSentences` utility (Intl.Segmenter + Regex fallback).
-- Integrated silence detection (1.5s timeout) to flush partial speech results.
-- Refactored `onresult` to ship data sentence-by-sentence for faster translation/UI.
-- Updated Supabase upsert to preserve and append to `full_transcription`.
+- Transformed `TranslatorDock` into a fixed 60px sticky header.
+- Relocated transcription text to the bottom of the screen with a 75px margin.
+- Centralized `EMOTION_COLORS` in `types.ts` for unified styling.
+- Adjusted button scaling (icons, fonts, padding) to fit the 60px height constraint.
 
 Files actually modified:
 - App.tsx
+- components/TranslatorDock.tsx
+- types.ts
+- tasks.md
 
 How it was tested:
-- Code review of buffer logic.
-- Verified schema compliance for `full_transcription`.
+- Code review of layout logic and sticky positioning.
+- Verified component imports and color mapping consistency.
 
 Test result:
 - PASS

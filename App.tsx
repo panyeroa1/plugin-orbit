@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { AppMode, Language, LANGUAGES, RoomState, AudioSource, EmotionType, AUTO_DETECT } from './types';
+import { AppMode, Language, LANGUAGES, RoomState, AudioSource, EmotionType, AUTO_DETECT, EMOTION_COLORS } from './types';
 import TranslatorDock from './components/TranslatorDock';
 import ErrorBanner from './components/ErrorBanner';
 import * as roomStateService from './services/roomStateService';
@@ -319,8 +319,7 @@ const App: React.FC = () => {
   const sourceDisplayText = livePartialText || lastFinalText;
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center pt-48 p-4 overflow-hidden relative">
-      <ErrorBanner message={errorMessage} onClear={() => setErrorMessage('')} />
+    <div className="min-h-screen bg-black flex flex-col items-center overflow-hidden relative pt-[60px]">
       <TranslatorDock
         mode={mode}
         roomState={roomState}
@@ -338,6 +337,27 @@ const App: React.FC = () => {
         isTtsLoading={isTtsLoading}
         emotion={emotion}
       />
+      
+      <ErrorBanner message={errorMessage} onClear={() => setErrorMessage('')} />
+      
+      {/* Bottom Transcription Area - 14px font, centered, 75px from bottom */}
+      <div className="fixed bottom-[75px] left-1/2 -translate-x-1/2 w-full max-w-4xl px-12 z-40 pointer-events-none">
+        <div className="text-center">
+          {sourceDisplayText && (
+            <p className="text-[14px] font-medium tracking-wide text-white/90 drop-shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-300">
+              {sourceDisplayText}
+            </p>
+          )}
+          {translatedStreamText && mode === 'listening' && (
+            <p className={`text-[14.5px] font-semibold tracking-wide mt-2 drop-shadow-2xl animate-in fade-in slide-in-from-bottom-1 duration-500 ${
+              EMOTION_COLORS[emotion] || 'text-emerald-400'
+            }`}>
+              {translatedStreamText}
+            </p>
+          )}
+        </div>
+      </div>
+
       <div className="fixed inset-0 pointer-events-none -z-10 opacity-30">
         <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(17,24,39,1)_0%,rgba(0,0,0,1)_100%)]" />
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-900/10 blur-[120px] rounded-full" />

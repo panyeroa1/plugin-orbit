@@ -5,6 +5,16 @@ export type AudioSource = "mic" | "system";
 
 export type EmotionType = "neutral" | "joy" | "sadness" | "anger" | "fear" | "calm" | "excited";
 
+export const EMOTION_COLORS: Record<EmotionType, string> = {
+  neutral: 'text-white/60',
+  joy: 'text-emerald-400',
+  sadness: 'text-blue-400',
+  anger: 'text-red-400',
+  fear: 'text-purple-400',
+  calm: 'text-cyan-300',
+  excited: 'text-amber-400',
+};
+
 export interface SpeakerInfo {
   userId: string;
   userName: string;
