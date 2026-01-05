@@ -10,7 +10,16 @@ import * as geminiService from './services/geminiService';
 
 import { supabase } from './services/supabaseClient';
 
-const MY_USER_ID = `user_${Math.random().toString(36).substring(7)}`;
+const getStoredUserId = () => {
+  let stored = sessionStorage.getItem('eburon_user_id');
+  if (!stored) {
+    stored = `user_${Math.random().toString(36).substring(7)}`;
+    sessionStorage.setItem('eburon_user_id', stored);
+  }
+  return stored;
+};
+
+const MY_USER_ID = getStoredUserId();
 const MY_USER_NAME = `Member ${MY_USER_ID.split('_')[1].toUpperCase()}`;
 const App: React.FC = () => {
   const [meetingId, setMeetingId] = useState<string | null>(null);
@@ -437,6 +446,8 @@ const App: React.FC = () => {
               
               // Allow async join to happen in background
               joinMeetingDB(newId, MY_USER_ID);
+              // Auto-start listening
+              setMode('listening');
 
               if (initialMeetingId) {
                 window.location.href = `${window.location.origin}?meeting=${newId}`;

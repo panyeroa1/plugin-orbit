@@ -19,6 +19,9 @@ export async function getRoomState(meetingId: string): Promise<RoomState> {
 }
 
 export function subscribeToRoom(meetingId: string, callback: (state: RoomState) => void) {
+  // Fetch initial state immediately
+  getRoomState(meetingId).then(state => callback(state));
+
   const channel = supabase.channel(`room:${meetingId}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings', filter: `meeting_id=eq.${meetingId}` }, 
       async (payload: any) => {
@@ -46,12 +49,12 @@ export function subscribeToRoom(meetingId: string, callback: (state: RoomState) 
 }
 
 export async function tryAcquireSpeaker(meetingId: string, userId: string): Promise<boolean> {
-  // Optimistic locking: Update only if active_speaker_id is NULL
+  // Optimistic locking: Update if NULL OR if I am already the speaker
   const { error, data } = await supabase
     .from('meetings')
     .update({ active_speaker_id: userId })
     .eq('meeting_id', meetingId)
-    .is('active_speaker_id', null)
+    .or(`active_speaker_id.is.null,active_speaker_id.eq.${userId}`)
     .select();
 
   return !error && data && data.length > 0;

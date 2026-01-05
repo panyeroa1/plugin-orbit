@@ -341,3 +341,40 @@ How it was tested:
 
 Test result:
 - PASS
+
+------------------------------------------------------------
+COMPACT MINI TASK FORMAT
+------------------------------------------------------------
+
+Task ID: T-0009
+Title: Minimize Dock & UI Enhancements
+Start log:
+- Timestamp: 2026-01-05 16:08
+- Plan: Implement hide/show functionality for TranslatorDock and visible Meet ID.
+End log:
+- Timestamp: 2026-01-05 16:13
+- Changed: Added `isMinimized` state, Chevron toggle button, and responsive padding.
+- Tests: Verified minimizing and restoring the dock.
+- Status: DONE
+
+Task ID: T-0010
+Title: Translation Persistence & Echo Mode
+Start log:
+- Timestamp: 2026-01-05 16:23
+- Plan: Save `translated_text` to DB and enable echo for testing.
+End log:
+- Timestamp: 2026-01-05 16:25
+- Changed: Added `updateTranslation` to App.tsx, updated geminiService.
+- Tests: Verified SQL updates in DB.
+- Status: DONE
+
+Task ID: T-0011
+Title: Host Roles & Distributed Speaker Lock
+Start log:
+- Timestamp: 2026-01-05 16:27
+- Plan: Use Supabase `meetings` table for speaker lock and participant tracking.
+End log:
+- Timestamp: 2026-01-05 16:35
+- Changed: Migrated room state to Supabase, created `meetings`/`participants` logic.
+- Tests: Verified multi-tab speaker locking.
+- Status: DONE
