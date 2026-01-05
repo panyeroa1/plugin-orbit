@@ -40,7 +40,7 @@ const AudioVisualizer: React.FC<{ data: Uint8Array, colorClass?: string }> = ({ 
             style={{ 
               height: `${height}px`,
               opacity: 0.3 + (val / 255) * 0.7,
-            }}
+            } as React.CSSProperties}
           />
         );
       })}
