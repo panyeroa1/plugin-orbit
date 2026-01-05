@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AppMode, Language, LANGUAGES, RoomState, AudioSource, EmotionType, EMOTION_COLORS } from '../types';
-import { ChevronDown, Mic, Volume2, Hand, X, Lock, Loader2, LogOut } from 'lucide-react';
+import { ChevronDown, Mic, Volume2, Hand, X, Lock, Loader2, Play, Share2, LogOut, ChevronUp } from 'lucide-react';
 
 interface TranslatorDockProps {
   mode: AppMode;
@@ -19,7 +19,13 @@ interface TranslatorDockProps {
   translatedStreamText?: string;
   isTtsLoading?: boolean;
   emotion?: EmotionType;
-  onExit?: () => void;
+  onJoin?: (meetingId: string) => void;
+  meetingId?: string | null;
+  onInvite?: () => void;
+  isSignedIn: boolean;
+  onAuthToggle: () => void;
+  isMinimized: boolean;
+  onMinimizeToggle: () => void;
 }
 
 // emotionColors moved to types.ts as EMOTION_COLORS
@@ -70,8 +76,26 @@ const TranslatorDock: React.FC<TranslatorDockProps> = ({
   translatedStreamText,
   isTtsLoading,
   emotion = 'neutral',
-  onExit
+  onJoin,
+  meetingId,
+  onInvite,
+  isSignedIn,
+  onAuthToggle,
+  isMinimized,
+  onMinimizeToggle
 }) => {
+  const [meetingIdInput, setMeetingIdInput] = React.useState(meetingId || '');
+  
+  // Update local input if external meetingId changes (and we aren't typing)
+  React.useEffect(() => {
+    if (meetingId) setMeetingIdInput(meetingId);
+  }, [meetingId]);
+
+  const handleStart = () => {
+    if (onJoin && meetingIdInput.trim()) {
+      onJoin(meetingIdInput.trim());
+    }
+  };
   const isSomeoneElseSpeaking = roomState.activeSpeaker && roomState.activeSpeaker.userId !== myUserId;
   const isMeSpeaking = mode === 'speaking';
   const isMeListening = mode === 'listening';
@@ -90,8 +114,23 @@ const TranslatorDock: React.FC<TranslatorDockProps> = ({
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-[60px] bg-[#1a2333]/95 backdrop-blur-2xl border-b border-white/5 z-50 flex items-center justify-center px-4" onClick={(e) => e.stopPropagation()}>
-      <div className="flex items-stretch h-full w-full max-w-5xl">
+    <>
+      {/* Minimize/Restore Toggle Tab - Centered at the very top */}
+      <div className={`fixed top-0 left-1/2 -translate-x-1/2 z-[60] transition-all duration-300 ${isMinimized ? 'translate-y-0' : 'translate-y-[60px]'}`}>
+        <button
+          onClick={onMinimizeToggle}
+          title={isMinimized ? "Show Toolbar" : "Hide Toolbar"}
+          className="bg-[#1a2333] hover:bg-[#25324a] text-slate-400 hover:text-white rounded-b-lg px-3 py-1 border-x border-b border-white/5 shadow-lg transition-colors flex items-center justify-center"
+        >
+          {isMinimized ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+        </button>
+      </div>
+
+      <header 
+        className={`fixed top-0 left-0 right-0 h-[60px] bg-[#1a2333]/95 backdrop-blur-2xl border-b border-white/5 z-50 flex items-center justify-center px-4 transition-transform duration-300 ${isMinimized ? '-translate-y-full' : 'translate-y-0'}`} 
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-stretch h-full w-full max-w-5xl">
         
         {/* Speak Button */}
         <div className="relative flex-1 flex items-stretch border-r border-white/5">
@@ -168,16 +207,56 @@ const TranslatorDock: React.FC<TranslatorDockProps> = ({
           <span className="font-bold text-[16px] tracking-tight">{isQueued ? 'Queued' : 'Queue'}</span>
         </button>
 
-        {/* Exit Button */}
+        {/* Meeting ID Input & Join - Only Visible when Signed In */}
+        {isSignedIn && (
+          <div className="flex items-center border-l border-white/5 h-full animate-in fade-in slide-in-from-right-4 duration-300">
+            <input 
+              type="text" 
+              value={meetingIdInput}
+              onChange={(e) => setMeetingIdInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleStart()}
+              placeholder="Meeting ID"
+              className="w-32 bg-transparent text-slate-200 text-sm font-semibold px-4 focus:outline-none placeholder:text-slate-600 h-full text-center"
+            />
+            {meetingIdInput !== meetingId && (
+              <button 
+                onClick={handleStart} 
+                title="Join Meeting"
+                className="h-full px-3 text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+              >
+                <Play className="w-3 h-3 fill-current" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Start/Stop Toggle Button */}
         <button
-          onClick={onExit}
-          className="flex-1 flex items-center justify-center gap-3 px-4 transition-all hover:bg-red-500/10 text-red-400 border-l border-white/5"
+          onClick={onAuthToggle}
+          className={`flex-1 flex items-center justify-center gap-3 px-4 transition-all border-l border-white/5 ${
+            isSignedIn 
+              ? 'hover:bg-red-500/10 text-red-400' 
+              : 'hover:bg-emerald-500/10 text-emerald-400'
+          }`}
         >
-          <LogOut className="w-4 h-4" />
-          <span className="font-bold text-[16px] tracking-tight">Exit</span>
+          {isSignedIn ? <LogOut className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
+          <span className="font-bold text-[16px] tracking-tight">{isSignedIn ? 'Stop' : 'Start'}</span>
         </button>
+
+        {/* Share Button - Only Visible when Signed In */}
+        {isSignedIn && (
+          <button
+            onClick={onInvite}
+            title={meetingId ? `Share Meeting: ${meetingId}` : 'Share Meeting'}
+            className="flex-1 flex items-center justify-center gap-3 px-4 transition-all hover:bg-emerald-500/10 text-emerald-400 border-l border-white/5"
+          >
+            <Share2 className="w-4 h-4" />
+            <span className="font-bold text-[16px] tracking-tight">Share</span>
+          </button>
+        )}
       </div>
-    </header>
+      </header>
+    </>
   );
 };
 

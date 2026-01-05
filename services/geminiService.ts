@@ -2,7 +2,7 @@
 import { GoogleGenAI, Modality, Type, LiveServerMessage } from "@google/genai";
 import { TranslationResult, EmotionType } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000; // 2 seconds

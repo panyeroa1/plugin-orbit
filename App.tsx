@@ -18,6 +18,7 @@ const App: React.FC = () => {
   const [meetingId, setMeetingId] = useState<string | null>(null);
   const [sessionUser, setSessionUser] = useState<any>(null);
   const [mode, setMode] = useState<AppMode>('idle');
+  const [isDockMinimized, setIsDockMinimized] = useState(false);
 
   const reportError = useCallback((message: string, error?: any) => {
     console.error(message, error);
@@ -33,23 +34,16 @@ const App: React.FC = () => {
         
         if (session?.user) {
           setSessionUser(session.user);
-        } else {
-          // Only sign in if no existing session
-          const { data: { user }, error: authError } = await supabase.auth.signInAnonymously();
-          if (authError) {
-            reportError("Authentication failed", authError);
-          } else {
-            setSessionUser(user);
+          
+          // Only generate meeting ID if we have a session
+          let currentMeetingId = sessionStorage.getItem('eburon_meeting_id');
+          if (!currentMeetingId) {
+            currentMeetingId = `MEETING_${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+            sessionStorage.setItem('eburon_meeting_id', currentMeetingId);
           }
+          setMeetingId(currentMeetingId);
         }
 
-        // Dynamic Meeting ID: Check session storage or URL, else generate new
-        let currentMeetingId = sessionStorage.getItem('eburon_meeting_id');
-        if (!currentMeetingId) {
-          currentMeetingId = `MEETING_${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
-          sessionStorage.setItem('eburon_meeting_id', currentMeetingId);
-        }
-        setMeetingId(currentMeetingId);
       } catch (err) {
         reportError("Session initialization failed", err);
       }
@@ -58,11 +52,6 @@ const App: React.FC = () => {
     initSession();
   }, [reportError]);
 
-  const handleExit = async () => {
-    await supabase.auth.signOut();
-    sessionStorage.removeItem('eburon_meeting_id');
-    window.location.reload();
-  };
 
   const [audioSource, setAudioSource] = useState<AudioSource>('mic');
   const [roomState, setRoomState] = useState<RoomState>(roomStateService.getRoomState());
@@ -362,7 +351,7 @@ const App: React.FC = () => {
   const sourceDisplayText = livePartialText || lastFinalText;
 
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center overflow-hidden relative pt-[60px]">
+    <div className={`min-h-screen bg-black flex flex-col items-center overflow-hidden relative transition-all duration-300 ${isDockMinimized ? 'pt-0' : 'pt-[60px]'}`}>
       <TranslatorDock
         mode={mode}
         roomState={roomState}
@@ -375,11 +364,51 @@ const App: React.FC = () => {
         audioData={audioData}
         audioSource={audioSource}
         onAudioSourceToggle={() => setAudioSource(audioSource === 'mic' ? 'system' : 'mic')}
-        onExit={handleExit}
+        isSignedIn={!!sessionUser}
+        onAuthToggle={async () => {
+          if (sessionUser) {
+            // Stop / Sign Out
+            await supabase.auth.signOut();
+            setSessionUser(null);
+            setMeetingId(null);
+            sessionStorage.removeItem('eburon_meeting_id');
+            window.location.reload();
+          } else {
+            // Start / Sign In
+            const { data: { user }, error } = await supabase.auth.signInAnonymously();
+            if (error) {
+              reportError("Sign in failed", error);
+            } else {
+              setSessionUser(user);
+              // Generate ID immediately on start
+              const newId = `MEETING_${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+              sessionStorage.setItem('eburon_meeting_id', newId);
+              setMeetingId(newId);
+            }
+          }
+        }}
+        onJoin={(newId) => {
+          if (newId && newId !== meetingId) {
+            sessionStorage.setItem('eburon_meeting_id', newId);
+            setMeetingId(newId);
+            // Optional: Reload to ensure clean state, or just state update is enough if useEffect handles re-subscription
+            window.location.reload(); 
+          }
+        }}
+        meetingId={meetingId}
+        onInvite={() => {
+          if (meetingId) {
+            const url = `${window.location.origin}?meeting=${meetingId}`;
+            navigator.clipboard.writeText(url);
+            alert(`Meeting link copied!\n${url}`);
+          }
+        }}
         liveStreamText={sourceDisplayText}
         translatedStreamText={translatedStreamText}
         isTtsLoading={isTtsLoading}
         emotion={emotion}
+        isMinimized={isDockMinimized}
+        onMinimizeToggle={() => setIsDockMinimized(!isDockMinimized)}
       />
       
       <ErrorBanner message={errorMessage} onClear={() => setErrorMessage('')} />
