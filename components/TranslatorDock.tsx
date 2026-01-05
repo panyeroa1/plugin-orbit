@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { AppMode, Language, LANGUAGES, RoomState, AudioSource, EmotionType, EMOTION_COLORS } from '../types';
-import { ChevronDown, Mic, Volume2, Hand, X, Lock, Loader2 } from 'lucide-react';
+import { ChevronDown, Mic, Volume2, Hand, X, Lock, Loader2, LogOut } from 'lucide-react';
 
 interface TranslatorDockProps {
   mode: AppMode;
@@ -19,31 +19,37 @@ interface TranslatorDockProps {
   translatedStreamText?: string;
   isTtsLoading?: boolean;
   emotion?: EmotionType;
+  onExit?: () => void;
 }
 
 // emotionColors moved to types.ts as EMOTION_COLORS
 
-const AudioVisualizer: React.FC<{ data: Uint8Array, colorClass?: string }> = ({ data, colorClass = 'bg-white' }) => {
+const Bar: React.FC<{ val: number; colorClass: string }> = ({ val, colorClass }) => {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const height = Math.max(2, (val / 255) * 14);
+  const opacity = 0.3 + (val / 255) * 0.7;
+
+  React.useLayoutEffect(() => {
+    if (ref.current) {
+      ref.current.style.height = `${height}px`;
+      ref.current.style.opacity = `${opacity}`;
+    }
+  }, [height, opacity]);
+
+  return <div ref={ref} className={`w-[1.8px] ${colorClass} rounded-full transition-all duration-100 ease-out`} />;
+};
+
+const AudioVisualizer: React.FC<{ data: Uint8Array; colorClass?: string }> = ({ data, colorClass = 'bg-white' }) => {
   if (!data || data.length === 0) return null;
-  const bars = Array.from(data.slice(3, 11));
-  const hasSignal = bars.some((v: number) => v > 4);
+  const barsArr = Array.from(data.slice(3, 11));
+  const hasSignal = barsArr.some((v: number) => v > 4);
   if (!hasSignal) return null;
 
   return (
     <div className="flex items-center gap-[1.5px] h-3 ml-2.5">
-      {bars.map((val: number, i) => {
-        const height = Math.max(2, (val / 255) * 14);
-        return (
-          <div
-            key={i}
-            className={`w-[1.8px] ${colorClass} rounded-full transition-all duration-100 ease-out`}
-            style={{ 
-              height: `${height}px`,
-              opacity: 0.3 + (val / 255) * 0.7,
-            } as React.CSSProperties}
-          />
-        );
-      })}
+      {barsArr.map((val, i) => (
+        <Bar key={i} val={val} colorClass={colorClass} />
+      ))}
     </div>
   );
 };
@@ -63,7 +69,8 @@ const TranslatorDock: React.FC<TranslatorDockProps> = ({
   liveStreamText,
   translatedStreamText,
   isTtsLoading,
-  emotion = 'neutral'
+  emotion = 'neutral',
+  onExit
 }) => {
   const isSomeoneElseSpeaking = roomState.activeSpeaker && roomState.activeSpeaker.userId !== myUserId;
   const isMeSpeaking = mode === 'speaking';
@@ -159,6 +166,15 @@ const TranslatorDock: React.FC<TranslatorDockProps> = ({
         >
           <Hand className={`w-4 h-4 ${isQueued ? 'animate-bounce' : ''}`} />
           <span className="font-bold text-[16px] tracking-tight">{isQueued ? 'Queued' : 'Queue'}</span>
+        </button>
+
+        {/* Exit Button */}
+        <button
+          onClick={onExit}
+          className="flex-1 flex items-center justify-center gap-3 px-4 transition-all hover:bg-red-500/10 text-red-400 border-l border-white/5"
+        >
+          <LogOut className="w-4 h-4" />
+          <span className="font-bold text-[16px] tracking-tight">Exit</span>
         </button>
       </div>
     </header>

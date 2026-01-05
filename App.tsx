@@ -1,3 +1,4 @@
+ 
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
@@ -13,10 +14,49 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const MY_USER_ID = `user_${Math.random().toString(36).substring(7)}`;
 const MY_USER_NAME = `Member ${MY_USER_ID.split('_')[1].toUpperCase()}`;
-const MEETING_ID = 'SUCCESS72355'; 
-
 const App: React.FC = () => {
+  const [meetingId, setMeetingId] = useState<string | null>(null);
+  const [sessionUser, setSessionUser] = useState<any>(null);
   const [mode, setMode] = useState<AppMode>('idle');
+
+  const reportError = useCallback((message: string, error?: any) => {
+    console.error(message, error);
+    setErrorMessage(message + (error?.message ? `: ${error.message}` : ''));
+  }, []);
+
+  // Initialize Auth and Meeting ID
+  useEffect(() => {
+    const initSession = async () => {
+      try {
+        // Anonymous Auth
+        const { data: { user }, error: authError } = await supabase.auth.signInAnonymously();
+        if (authError) {
+          reportError("Authentication failed", authError);
+        } else {
+          setSessionUser(user);
+        }
+
+        // Dynamic Meeting ID: Check session storage or URL, else generate new
+        let currentMeetingId = sessionStorage.getItem('eburon_meeting_id');
+        if (!currentMeetingId) {
+          currentMeetingId = `MEETING_${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+          sessionStorage.setItem('eburon_meeting_id', currentMeetingId);
+        }
+        setMeetingId(currentMeetingId);
+      } catch (err) {
+        reportError("Session initialization failed", err);
+      }
+    };
+
+    initSession();
+  }, [reportError]);
+
+  const handleExit = async () => {
+    await supabase.auth.signOut();
+    sessionStorage.removeItem('eburon_meeting_id');
+    window.location.reload();
+  };
+
   const [audioSource, setAudioSource] = useState<AudioSource>('mic');
   const [roomState, setRoomState] = useState<RoomState>(roomStateService.getRoomState());
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(LANGUAGES[0]);
@@ -31,11 +71,6 @@ const App: React.FC = () => {
 
   const [errorMessage, setErrorMessage] = useState('');
   const [fullTranscript, setFullTranscript] = useState('');
-
-  const reportError = useCallback((message: string, error?: any) => {
-    console.error(message, error);
-    setErrorMessage(message + (error?.message ? `: ${error.message}` : ''));
-  }, []);
 
   const selectedLanguageRef = useRef<Language>(LANGUAGES[0]);
   useEffect(() => {
@@ -89,14 +124,14 @@ const App: React.FC = () => {
       // Fetch latest full transcript to append
       const { data: existing } = await supabase.from('transcript_segments')
         .select('full_transcription')
-        .eq('meeting_id', MEETING_ID)
+        .eq('meeting_id', meetingId)
         .maybeSingle();
 
       const baseText = existing?.full_transcription || '';
       const newFull = isFinalSegment ? (baseText + " " + segment).trim() : baseText;
 
       const { error } = await supabase.from('transcript_segments').upsert({ 
-        meeting_id: MEETING_ID, 
+        meeting_id: meetingId, 
         speaker_id: MY_USER_ID, 
         source_lang: selectedLanguageRef.current.code, 
         source_text: segment,
@@ -170,10 +205,11 @@ const App: React.FC = () => {
   }, [processNextInQueue]);
 
   const fetchCurrentSegment = useCallback(async () => {
+    if (!meetingId) return;
     try {
       const { data, error } = await supabase.from('transcript_segments')
         .select('*')
-        .eq('meeting_id', MEETING_ID)
+        .eq('meeting_id', meetingId)
         .maybeSingle();
       
       if (error) throw error;
@@ -185,10 +221,10 @@ const App: React.FC = () => {
   }, [handleIncomingRow]);
 
   useEffect(() => {
-    if (mode === 'listening') {
+    if (mode === 'listening' && meetingId) {
       const channel = supabase
-        .channel(`meeting:${MEETING_ID}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'transcript_segments', filter: `meeting_id=eq.${MEETING_ID}` }, 
+        .channel(`meeting:${meetingId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'transcript_segments', filter: `meeting_id=eq.${meetingId}` }, 
           (payload) => handleIncomingRow(payload.new))
         .subscribe((status, err) => {
           if (status === 'CHANNEL_ERROR') {
@@ -332,6 +368,7 @@ const App: React.FC = () => {
         audioData={audioData}
         audioSource={audioSource}
         onAudioSourceToggle={() => setAudioSource(audioSource === 'mic' ? 'system' : 'mic')}
+        onExit={handleExit}
         liveStreamText={sourceDisplayText}
         translatedStreamText={translatedStreamText}
         isTtsLoading={isTtsLoading}
@@ -367,4 +404,6 @@ const App: React.FC = () => {
   );
 };
 
+
 export default App;
+
