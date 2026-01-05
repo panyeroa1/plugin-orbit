@@ -23,7 +23,7 @@ interface TranslatorDockProps {
   meetingId?: string | null;
   onInvite?: () => void;
   isSignedIn: boolean;
-  onAuthToggle: () => void;
+  onAuthToggle: (meetingId?: string) => void;
   isMinimized: boolean;
   onMinimizeToggle: () => void;
 }
@@ -92,8 +92,14 @@ const TranslatorDock: React.FC<TranslatorDockProps> = ({
   }, [meetingId]);
 
   const handleStart = () => {
-    if (onJoin && meetingIdInput.trim()) {
+    // If signed in, treat as switch/join (reload). 
+    // If signed out, treat as start with ID (auth + set ID).
+    if (isSignedIn && onJoin && meetingIdInput.trim()) {
       onJoin(meetingIdInput.trim());
+    } else if (!isSignedIn && meetingIdInput.trim()) {
+       onAuthToggle(meetingIdInput.trim());
+    } else if (!isSignedIn) {
+       onAuthToggle(); // standard random start
     }
   };
   const isSomeoneElseSpeaking = roomState.activeSpeaker && roomState.activeSpeaker.userId !== myUserId;
@@ -207,32 +213,30 @@ const TranslatorDock: React.FC<TranslatorDockProps> = ({
           <span className="font-bold text-[16px] tracking-tight">{isQueued ? 'Queued' : 'Queue'}</span>
         </button>
 
-        {/* Meeting ID Input & Join - Only Visible when Signed In */}
-        {isSignedIn && (
-          <div className="flex items-center border-l border-white/5 h-full animate-in fade-in slide-in-from-right-4 duration-300">
-            <input 
-              type="text" 
-              value={meetingIdInput}
-              onChange={(e) => setMeetingIdInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleStart()}
-              placeholder="Meeting ID"
-              className="w-32 bg-transparent text-slate-200 text-sm font-semibold px-4 focus:outline-none placeholder:text-slate-600 h-full text-center"
-            />
-            {meetingIdInput !== meetingId && (
-              <button 
-                onClick={handleStart} 
-                title="Join Meeting"
-                className="h-full px-3 text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-              >
-                <Play className="w-3 h-3 fill-current" />
-              </button>
-            )}
-          </div>
-        )}
+        {/* Meeting ID Input & Join */}
+        <div className="flex items-center border-l border-white/5 h-full animate-in fade-in slide-in-from-right-4 duration-300">
+          <input 
+            type="text" 
+            value={meetingIdInput}
+            onChange={(e) => setMeetingIdInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleStart()}
+            placeholder={isSignedIn ? "Switch Room ID" : "Join Room ID"}
+            className="w-32 bg-transparent text-slate-200 text-sm font-semibold px-4 focus:outline-none placeholder:text-slate-600 h-full text-center"
+          />
+          {meetingIdInput !== meetingId && (
+            <button 
+              onClick={handleStart} 
+              title={isSignedIn ? "Switch Room" : "Join Room"}
+              className="h-full px-3 text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+            >
+              <Play className="w-3 h-3 fill-current" />
+            </button>
+          )}
+        </div>
 
         {/* Start/Stop Toggle Button */}
         <button
-          onClick={onAuthToggle}
+          onClick={() => isSignedIn ? onAuthToggle() : handleStart()}
           className={`flex-1 flex items-center justify-center gap-3 px-4 transition-all border-l border-white/5 ${
             isSignedIn 
               ? 'hover:bg-red-500/10 text-red-400' 
@@ -240,7 +244,7 @@ const TranslatorDock: React.FC<TranslatorDockProps> = ({
           }`}
         >
           {isSignedIn ? <LogOut className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
-          <span className="font-bold text-[16px] tracking-tight">{isSignedIn ? 'Stop' : 'Start'}</span>
+          <span className="font-bold text-[16px] tracking-tight">{isSignedIn ? 'Stop' : (meetingIdInput ? 'Join' : 'Start')}</span>
         </button>
 
         {/* Share Button - Only Visible when Signed In */}

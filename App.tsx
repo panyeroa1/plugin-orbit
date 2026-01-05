@@ -365,7 +365,7 @@ const App: React.FC = () => {
         audioSource={audioSource}
         onAudioSourceToggle={() => setAudioSource(audioSource === 'mic' ? 'system' : 'mic')}
         isSignedIn={!!sessionUser}
-        onAuthToggle={async () => {
+        onAuthToggle={async (initialMeetingId?: string) => {
           if (sessionUser) {
             // Stop / Sign Out
             await supabase.auth.signOut();
@@ -380,10 +380,17 @@ const App: React.FC = () => {
               reportError("Sign in failed", error);
             } else {
               setSessionUser(user);
-              // Generate ID immediately on start
-              const newId = `MEETING_${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+              // Use provided ID or generate new one
+              const newId = initialMeetingId || `MEETING_${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
               sessionStorage.setItem('eburon_meeting_id', newId);
               setMeetingId(newId);
+              // If we joined a specific room via input, we might want to reload to be safe, 
+              // but state update is usually enough for a fresh session. 
+              // However, if the user typed an ID, let's make sure we sync everything.
+              if (initialMeetingId) {
+                // optional: force reload if needing clean state for specific room
+                window.location.href = `${window.location.origin}?meeting=${newId}`;
+              }
             }
           }
         }}
