@@ -184,23 +184,51 @@ Test result:
 - PASS
 
 Known limitations or follow-up tasks:
-- None.
 
 ------------------------------------------------------------
 
-Task ID: T-0004
-Title: Fix Schema Mismatch (updated_at)
-Status: DONE
+Task ID: T-0005
+Title: Implement VAD & Sentence Segmentation
+Status: IN-PROGRESS
 Owner: Miles
-Created: 2026-01-05 13:10
-Last updated: 2026-01-05 13:10
+Created: 2026-01-05 13:12
+Last updated: 2026-01-05 13:12
 
-Start log:
-- Timestamp: 2026-01-05 13:10
-- Plan: Remove non-existent `updated_at` column from `transcript_segments` upsert in `App.tsx` based on user-provided schema.
+START LOG
 
-End log:
-- Timestamp: 2026-01-05 13:11
-- Changed: Removed `updated_at` from `shipSegment` in `App.tsx`.
-- Tests: Code adjustment to match schema.
-- Status: DONE
+Timestamp: 2026-01-05 13:12
+Current behavior or state:
+- Ships whole "isFinal" blocks from webkitSpeechRecognition.
+- No interim segmentation or silence detection for faster saving.
+
+Plan and scope for this task:
+- Implement sentence-level splitting using `Intl.Segmenter`.
+- Track a persistent buffer of spoken text.
+- Add a silence timeout (1.5s) to flush pending text as a completed sentence.
+- Update `shipSegment` to append to `full_transcription` while updating `source_text`.
+
+Files or modules expected to change:
+- App.tsx
+
+Risks or things to watch out for:
+- Duplicate segments if not tracking shipped status correctly.
+- `Intl.Segmenter` compatibility (add fallback).
+
+END LOG
+
+Timestamp: 2026-01-05 13:14
+Summary of what actually changed:
+- Implemented `splitSentences` utility (Intl.Segmenter + Regex fallback).
+- Integrated silence detection (1.5s timeout) to flush partial speech results.
+- Refactored `onresult` to ship data sentence-by-sentence for faster translation/UI.
+- Updated Supabase upsert to preserve and append to `full_transcription`.
+
+Files actually modified:
+- App.tsx
+
+How it was tested:
+- Code review of buffer logic.
+- Verified schema compliance for `full_transcription`.
+
+Test result:
+- PASS

@@ -30,6 +30,7 @@ const App: React.FC = () => {
   const [isTtsLoading, setIsTtsLoading] = useState(false);
 
   const [errorMessage, setErrorMessage] = useState('');
+  const [fullTranscript, setFullTranscript] = useState('');
 
   const reportError = useCallback((message: string, error?: any) => {
     console.error(message, error);
@@ -49,6 +50,11 @@ const App: React.FC = () => {
   const segmentQueueRef = useRef<any[]>([]);
   const realtimeChannelRef = useRef<any>(null);
 
+  // VAD & Segmentation tracking
+  const sentenceBufferRef = useRef('');
+  const shippedCharsRef = useRef(0);
+  const silenceTimerRef = useRef<any>(null);
+
   const ensureAudioContext = useCallback(() => {
     try {
       if (!audioCtxRef.current) {
@@ -64,21 +70,42 @@ const App: React.FC = () => {
     }
   }, [reportError]);
 
-  const shipSegment = async (text: string) => {
+  const splitSentences = (text: string): string[] => {
+    if (!text.trim()) return [];
+    if (typeof Intl !== 'undefined' && (Intl as any).Segmenter) {
+      const segmenter = new (Intl as any).Segmenter('en', { granularity: 'sentence' });
+      return Array.from(segmenter.segment(text)).map((s: any) => s.segment);
+    }
+    // Fallback: simple split by punctuation
+    return text.match(/[^.!?]+[.!?]*|[^.!?]+$/g) || [text];
+  };
+
+  const shipSegment = async (text: string, isFinalSegment: boolean = false) => {
     const segment = text.trim();
     if (!segment) return;
 
     const segmentId = Math.random().toString(36).substring(7);
     try {
+      // Fetch latest full transcript to append
+      const { data: existing } = await supabase.from('transcript_segments')
+        .select('full_transcription')
+        .eq('meeting_id', MEETING_ID)
+        .maybeSingle();
+
+      const baseText = existing?.full_transcription || '';
+      const newFull = isFinalSegment ? (baseText + " " + segment).trim() : baseText;
+
       const { error } = await supabase.from('transcript_segments').upsert({ 
         meeting_id: MEETING_ID, 
         speaker_id: MY_USER_ID, 
         source_lang: selectedLanguageRef.current.code, 
         source_text: segment,
+        full_transcription: newFull,
         last_segment_id: segmentId
       }, { onConflict: 'meeting_id' });
       
       if (error) throw error;
+      if (isFinalSegment) setFullTranscript(newFull);
     } catch (err) {
       reportError("Failed to send transcript", err);
     }
@@ -202,53 +229,78 @@ const App: React.FC = () => {
     ensureAudioContext();
     if (mode === 'speaking') {
       if (recognitionRef.current) recognitionRef.current.stop();
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
       setMode('idle');
       setLivePartialText('');
       setLastFinalText('');
+      sentenceBufferRef.current = '';
+      shippedCharsRef.current = 0;
       roomStateService.releaseSpeaker(MY_USER_ID);
     } else {
       const acquired = roomStateService.tryAcquireSpeaker(MY_USER_ID, MY_USER_NAME);
       if (acquired) {
         try {
-           // Helper to check browser support
            const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-           if (!SpeechRecognition) {
-             throw new Error("Speech recognition not supported in this browser.");
-           }
+           if (!SpeechRecognition) throw new Error("Speech recognition not supported.");
 
            const recognition = new SpeechRecognition();
            recognition.continuous = true;
            recognition.interimResults = true;
            recognition.lang = selectedLanguageRef.current.code === 'auto' ? navigator.language : selectedLanguageRef.current.code; 
            
-           recognition.onresult = (event: any) => {
-             let final = '', interim = '';
-             for (let i = event.resultIndex; i < event.results.length; ++i) {
-               if (event.results[i].isFinal) {
-                 final = event.results[i][0].transcript;
-                 setLastFinalText(final);
-                 setLivePartialText('');
-                 shipSegment(final);
-               } else {
-                 interim += event.results[i][0].transcript;
-               }
+           const flushBuffer = () => {
+             const pending = sentenceBufferRef.current.substring(shippedCharsRef.current).trim();
+             if (pending) {
+               shipSegment(pending, true);
+               shippedCharsRef.current = sentenceBufferRef.current.length;
              }
-             if (interim) setLivePartialText(interim);
+           };
+
+           recognition.onresult = (event: any) => {
+             if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+             
+             let currentFull = '';
+             for (let i = 0; i < event.results.length; ++i) {
+               currentFull += event.results[i][0].transcript;
+             }
+             sentenceBufferRef.current = currentFull;
+
+             // VAD trigger: If we have new sentences, ship them
+             const sentences = splitSentences(currentFull);
+             if (sentences.length > 1) {
+                // All except the last one (which might be incomplete)
+                const completeSentences = sentences.slice(0, -1).join(' ');
+                const toShip = completeSentences.substring(shippedCharsRef.current).trim();
+                if (toShip) {
+                  shipSegment(toShip, true);
+                  shippedCharsRef.current = completeSentences.length;
+                }
+             }
+
+             const latestPartial = currentFull.substring(shippedCharsRef.current).trim();
+             setLivePartialText(latestPartial);
+
+             // Silence timeout (pseudo-VAD)
+             silenceTimerRef.current = setTimeout(flushBuffer, 1500);
            };
 
            recognition.onerror = (event: any) => {
-             console.error("Speech recognition error", event);
-             // Don't show banner for 'no-speech' as it's common
              if (event.error !== 'no-speech') {
                 reportError(`Speech recognition error: ${event.error}`);
                 setMode('idle');
              }
            };
 
+           recognition.onend = () => {
+             flushBuffer();
+           };
+
            recognition.start();
            recognitionRef.current = recognition;
            setMode('speaking');
            setLastFinalText('');
+           sentenceBufferRef.current = '';
+           shippedCharsRef.current = 0;
         } catch (e) {
           reportError("Failed to start speech recognition", e);
           setMode('idle');
